@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Unsubscribe</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{font-family:system-ui,-apple-system,Roboto,"Segoe UI",Arial;margin:0;padding:0;background:#f6f8fa}
+    .card{max-width:720px;margin:6rem auto;background:white;padding:2rem;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.08);text-align:center}
+    a.button{display:inline-block;margin-top:1rem;padding:.6rem 1rem;background:#0078d4;color:white;border-radius:6px;text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="title">Processing…</h1>
+    <p id="msg"></p>
+    <div id="action"></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const status = params.get('status');
+    const title = document.getElementById('title');
+    const msg = document.getElementById('msg');
+    const action = document.getElementById('action');
+
+    if (status === 'success') {
+      title.textContent = 'Unsubscribed';
+      msg.textContent = 'You have been unsubscribed and will no longer receive notifications.';
+      action.innerHTML = '<a class="button" href="/">Return to dashboard</a>';
+    } else if (status === 'already') {
+      title.textContent = 'Already unsubscribed';
+      msg.textContent = 'This subscription has already been removed.';
+      action.innerHTML = '<a class="button" href="/">Return to dashboard</a>';
+    } else if (status === 'invalid') {
+      title.textContent = 'Invalid unsubscribe link';
+      msg.textContent = 'The unsubscribe link is invalid.';
+      action.innerHTML = '<a class="button" href="/">Return to dashboard</a>';
+    } else if (status === 'missing') {
+      title.textContent = 'Missing token';
+      msg.textContent = 'No unsubscribe token was provided.';
+      action.innerHTML = '<a class="button" href="/">Return to dashboard</a>';
+    } else {
+      title.textContent = 'Error';
+      msg.textContent = 'An unexpected error occurred while processing your unsubscribe request.';
+      action.innerHTML = '<a class="button" href="/">Return to dashboard</a>';
+    }
+  </script>
+</body>
+</html>
