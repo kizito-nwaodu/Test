@@ -1,1 +1,334 @@
 
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Microsoft Credentials Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Roboto, "Segoe UI", Arial; margin: 0; padding: 0; background: #f6f8fa; color: #111; }
+    header { background: #0078d4; color: white; padding: 1rem; }
+    .container { max-width: 900px; margin: 1rem auto; padding: 1rem; background: white; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: .75rem 1rem; border-bottom: 1px solid #eee; display:flex; justify-content:space-between; align-items:center; }
+    li a { color: #0366d6; text-decoration: none; font-weight: 600; }
+    .time { color: #666; font-size: .9rem; }
+    .toast { position: fixed; right: 1rem; bottom: 1rem; background: #0b8457; color: white; padding: .5rem 1rem; border-radius: 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); display:none; }
+    .controls { display:flex; gap:1rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap; }
+    .subscribe { margin-top:1rem; padding:1rem; border:1px solid #eee; border-radius:6px; }
+    .small { font-size:0.9rem; color:#555 }
+    input[type="email"] { padding:.5rem; width: 280px; }
+    button { padding:.5rem 1rem; border-radius:6px; border: none; background: #0078d4; color: white; cursor: pointer; }
+    .inline { display:inline-block; margin-left:8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 style="margin:0">Microsoft Credentials Dashboard</h1>
+    <div style="opacity:0.9; margin-top:6px">Live updates when new certifications, exams or skills appear</div>
+  </header>
+
+  <div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem">
+      <h2 style="margin:0">Credentials</h2>
+      <small id="status" class="time">Connecting...</small>
+    </div>
+
+    <div class="controls">
+      <div>
+        <label><input type="checkbox" id="filter-cert" checked> Certifications</label>
+        <label style="margin-left:8px"><input type="checkbox" id="filter-exam" checked> Exams</label>
+        <label style="margin-left:8px"><input type="checkbox" id="filter-skill" checked> Skills</label>
+      </div>
+      <div class="small">Filter the list by type. New items matching filters will appear live.</div>
+    </div>
+
+    <ul id="list">
+      <li>Loading…</li>
+    </ul>
+
+    <div class="subscribe">
+      <h3 style="margin-top:0">Subscribe for email notifications</h3>
+      <div class="small">Enter your email and choose which types you'd like to get notifications for. You'll receive a confirmation email — you must confirm before receiving notifications.</div>
+      <form id="subscribe-form" style="margin-top:8px" onsubmit="return false;">
+        <div style="margin:8px 0">
+          <input id="sub-email" type="email" placeholder="you@example.com" required />
+        </div>
+        <div>
+          <label><input type="checkbox" id="sub-cert" checked> Certifications</label>
+          <label style="margin-left:8px"><input type="checkbox" id="sub-exam"> Exams</label>
+          <label style="margin-left:8px"><input type="checkbox" id="sub-skill"> Skills</label>
+        </div>
+        <div style="margin-top:8px">
+          <button id="sub-submit">Subscribe</button>
+          <span id="sub-msg" style="margin-left:12px"></span>
+        </div>
+      </form>
+
+      <hr style="margin:12px 0">
+
+      <h4 style="margin:0 0 8px 0">Have a pending confirmation?</h4>
+      <div class="small">If you didn't receive the confirmation email, enter your email below to resend it.</div>
+      <form id="resend-form" style="margin-top:8px" onsubmit="return false;">
+        <input id="resend-email" type="email" placeholder="you@example.com" required />
+        <button id="resend-submit" class="inline">Resend confirmation</button>
+        <span id="resend-msg" style="margin-left:12px"></span>
+      </form>
+
+      <hr style="margin:12px 0">
+
+      <h4 style="margin:0 0 8px 0">Want to unsubscribe?</h4>
+      <div class="small">If you want to unsubscribe but don't have your unsubscribe link, request an unsubscribe email.</div>
+      <form id="req-unsub-form" style="margin-top:8px" onsubmit="return false;">
+        <input id="req-unsub-email" type="email" placeholder="you@example.com" required />
+        <button id="req-unsub-submit" class="inline">Request unsubscribe email</button>
+        <span id="req-unsub-msg" style="margin-left:12px"></span>
+      </form>
+    </div>
+
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+    const listEl = document.getElementById('list');
+    const toast = document.getElementById('toast');
+
+    const filterCert = document.getElementById('filter-cert');
+    const filterExam = document.getElementById('filter-exam');
+    const filterSkill = document.getElementById('filter-skill');
+
+    let allItems = []; // cached list
+
+    function showToast(text) {
+      toast.textContent = text;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 5000);
+    }
+
+    function renderList(items) {
+      listEl.innerHTML = '';
+      if (!items || items.length === 0) {
+        listEl.innerHTML = '<li>No credentials found.</li>';
+        return;
+      }
+      for (const it of items) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = it.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = it.title;
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.flexDirection = 'column';
+        right.style.alignItems = 'flex-end';
+        const type = document.createElement('div');
+        type.className = 'small';
+        type.textContent = it.type;
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = new Date(it.first_seen_at).toLocaleString();
+        right.appendChild(type);
+        right.appendChild(time);
+        li.appendChild(a);
+        li.appendChild(right);
+        listEl.appendChild(li);
+      }
+    }
+
+    function applyFilters() {
+      const showCert = filterCert.checked;
+      const showExam = filterExam.checked;
+      const showSkill = filterSkill.checked;
+      const filtered = allItems.filter(it => {
+        if (it.type === 'certification') return showCert;
+        if (it.type === 'exam') return showExam;
+        if (it.type === 'skill') return showSkill;
+        return true;
+      });
+      renderList(filtered);
+    }
+
+    async function loadInitial() {
+      try {
+        const res = await fetch('/api/credentials');
+        const json = await res.json();
+        allItems = json.data || [];
+        applyFilters();
+      } catch (err) {
+        listEl.innerHTML = '<li>Error loading data</li>';
+        console.error(err);
+      }
+    }
+
+    filterCert.addEventListener('change', applyFilters);
+    filterExam.addEventListener('change', applyFilters);
+    filterSkill.addEventListener('change', applyFilters);
+
+    loadInitial();
+
+    const socket = io();
+
+    socket.on('connect', () => {
+      statusEl.textContent = 'Connected';
+    });
+    socket.on('disconnect', () => {
+      statusEl.textContent = 'Disconnected';
+    });
+
+    socket.on('new-credential', (data) => {
+      // Add to cache
+      allItems.unshift(data);
+      // If it passes current filters, insert at top
+      const showCert = filterCert.checked;
+      const showExam = filterExam.checked;
+      const showSkill = filterSkill.checked;
+      let show = false;
+      if (data.type === 'certification' && showCert) show = true;
+      if (data.type === 'exam' && showExam) show = true;
+      if (data.type === 'skill' && showSkill) show = true;
+      if (show) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = data.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = data.title;
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.flexDirection = 'column';
+        right.style.alignItems = 'flex-end';
+        const type = document.createElement('div');
+        type.className = 'small';
+        type.textContent = data.type;
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = new Date(data.first_seen_at).toLocaleString();
+        right.appendChild(type);
+        right.appendChild(time);
+        li.appendChild(a);
+        li.appendChild(right);
+        if (listEl.firstChild) listEl.insertBefore(li, listEl.firstChild);
+        else listEl.appendChild(li);
+      }
+      showToast('New ' + data.type + ': ' + data.title);
+    });
+
+    // Subscribe form
+    const subForm = document.getElementById('subscribe-form');
+    const subEmail = document.getElementById('sub-email');
+    const subCert = document.getElementById('sub-cert');
+    const subExam = document.getElementById('sub-exam');
+    const subSkill = document.getElementById('sub-skill');
+    const subMsg = document.getElementById('sub-msg');
+    const subSubmit = document.getElementById('sub-submit');
+    subForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      subMsg.textContent = '';
+      const email = subEmail.value.trim();
+      const types = [];
+      if (subCert.checked) types.push('certification');
+      if (subExam.checked) types.push('exam');
+      if (subSkill.checked) types.push('skill');
+      if (!email || types.length === 0) {
+        subMsg.textContent = 'Provide email and at least one type';
+        return;
+      }
+      subSubmit.disabled = true;
+      try {
+        const res = await fetch('/api/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, types })
+        });
+        const j = await res.json();
+        if (res.ok) {
+          subMsg.textContent = 'Subscription created. Check your email and click the confirmation link.';
+          subForm.reset();
+          subCert.checked = true;
+        } else {
+          subMsg.textContent = (j && j.error) ? j.error : 'Subscription failed';
+        }
+      } catch (err) {
+        console.error(err);
+        subMsg.textContent = 'Error subscribing';
+      } finally {
+        subSubmit.disabled = false;
+      }
+    });
+
+    // Resend confirmation form
+    const resendForm = document.getElementById('resend-form');
+    const resendEmail = document.getElementById('resend-email');
+    const resendMsg = document.getElementById('resend-msg');
+    const resendSubmit = document.getElementById('resend-submit');
+    resendForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      resendMsg.textContent = '';
+      const email = resendEmail.value.trim();
+      if (!email) {
+        resendMsg.textContent = 'Enter an email';
+        return;
+      }
+      resendSubmit.disabled = true;
+      try {
+        const res = await fetch('/api/resend-confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const j = await res.json();
+        if (res.ok) {
+          resendMsg.textContent = j.message || 'Confirmation resent. Check your email.';
+          resendForm.reset();
+        } else {
+          resendMsg.textContent = (j && j.error) ? j.error : 'Failed to resend';
+        }
+      } catch (err) {
+        console.error(err);
+        resendMsg.textContent = 'Error';
+      } finally {
+        resendSubmit.disabled = false;
+      }
+    });
+
+    // Request unsubscribe form
+    const reqUnsubForm = document.getElementById('req-unsub-form');
+    const reqUnsubEmail = document.getElementById('req-unsub-email');
+    const reqUnsubMsg = document.getElementById('req-unsub-msg');
+    const reqUnsubSubmit = document.getElementById('req-unsub-submit');
+    reqUnsubForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      reqUnsubMsg.textContent = '';
+      const email = reqUnsubEmail.value.trim();
+      if (!email) {
+        reqUnsubMsg.textContent = 'Enter an email';
+        return;
+      }
+      reqUnsubSubmit.disabled = true;
+      try {
+        const res = await fetch('/api/request-unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const j = await res.json();
+        if (res.ok) {
+          reqUnsubMsg.textContent = j.message || 'Unsubscribe email sent. Check your inbox.';
+          reqUnsubForm.reset();
+        } else {
+          reqUnsubMsg.textContent = (j && j.error) ? j.error : 'Failed to request unsubscribe';
+        }
+      } catch (err) {
+        console.error(err);
+        reqUnsubMsg.textContent = 'Error';
+      } finally {
+        reqUnsubSubmit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
