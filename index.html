@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -20,6 +19,8 @@
     input[type="email"] { padding:.5rem; width: 280px; }
     button { padding:.5rem 1rem; border-radius:6px; border: none; background: #0078d4; color: white; cursor: pointer; }
     .inline { display:inline-block; margin-left:8px; }
+    .error { color: #b00020; margin-left: 8px; }
+    .success { color: #0b8457; margin-left: 8px; }
   </style>
 </head>
 <body>
@@ -50,7 +51,9 @@
     <div class="subscribe">
       <h3 style="margin-top:0">Subscribe for email notifications</h3>
       <div class="small">Enter your email and choose which types you'd like to get notifications for. You'll receive a confirmation email — you must confirm before receiving notifications.</div>
-      <form id="subscribe-form" style="margin-top:8px" onsubmit="return false;">
+
+      <!-- Subscribe form -->
+      <form id="subscribe-form" style="margin-top:8px">
         <div style="margin:8px 0">
           <input id="sub-email" type="email" placeholder="you@example.com" required />
         </div>
@@ -60,7 +63,7 @@
           <label style="margin-left:8px"><input type="checkbox" id="sub-skill"> Skills</label>
         </div>
         <div style="margin-top:8px">
-          <button id="sub-submit">Subscribe</button>
+          <button id="sub-submit" type="submit">Subscribe</button>
           <span id="sub-msg" style="margin-left:12px"></span>
         </div>
       </form>
@@ -69,9 +72,11 @@
 
       <h4 style="margin:0 0 8px 0">Have a pending confirmation?</h4>
       <div class="small">If you didn't receive the confirmation email, enter your email below to resend it.</div>
-      <form id="resend-form" style="margin-top:8px" onsubmit="return false;">
+
+      <!-- Resend confirmation form -->
+      <form id="resend-form" style="margin-top:8px">
         <input id="resend-email" type="email" placeholder="you@example.com" required />
-        <button id="resend-submit" class="inline">Resend confirmation</button>
+        <button id="resend-submit" class="inline" type="submit">Resend confirmation</button>
         <span id="resend-msg" style="margin-left:12px"></span>
       </form>
 
@@ -79,9 +84,11 @@
 
       <h4 style="margin:0 0 8px 0">Want to unsubscribe?</h4>
       <div class="small">If you want to unsubscribe but don't have your unsubscribe link, request an unsubscribe email.</div>
-      <form id="req-unsub-form" style="margin-top:8px" onsubmit="return false;">
+
+      <!-- Request unsubscribe form -->
+      <form id="req-unsub-form" style="margin-top:8px">
         <input id="req-unsub-email" type="email" placeholder="you@example.com" required />
-        <button id="req-unsub-submit" class="inline">Request unsubscribe email</button>
+        <button id="req-unsub-submit" class="inline" type="submit">Request unsubscribe email</button>
         <span id="req-unsub-msg" style="margin-left:12px"></span>
       </form>
     </div>
@@ -92,6 +99,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    // Basic UI helpers and state
     const statusEl = document.getElementById('status');
     const listEl = document.getElementById('list');
     const toast = document.getElementById('toast');
@@ -106,6 +114,11 @@
       toast.textContent = text;
       toast.style.display = 'block';
       setTimeout(() => { toast.style.display = 'none'; }, 5000);
+    }
+
+    function setMsg(el, text, ok = true) {
+      el.textContent = text;
+      el.className = ok ? 'success' : 'error';
     }
 
     function renderList(items) {
@@ -160,7 +173,7 @@
         applyFilters();
       } catch (err) {
         listEl.innerHTML = '<li>Error loading data</li>';
-        console.error(err);
+        console.error('Error loading initial credentials', err);
       }
     }
 
@@ -217,7 +230,7 @@
       showToast('New ' + data.type + ': ' + data.title);
     });
 
-    // Subscribe form
+    // --- Subscription form handler ---
     const subForm = document.getElementById('subscribe-form');
     const subEmail = document.getElementById('sub-email');
     const subCert = document.getElementById('sub-cert');
@@ -225,8 +238,10 @@
     const subSkill = document.getElementById('sub-skill');
     const subMsg = document.getElementById('sub-msg');
     const subSubmit = document.getElementById('sub-submit');
+
     subForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      console.log('subscribe form submit');
       subMsg.textContent = '';
       const email = subEmail.value.trim();
       const types = [];
@@ -234,7 +249,7 @@
       if (subExam.checked) types.push('exam');
       if (subSkill.checked) types.push('skill');
       if (!email || types.length === 0) {
-        subMsg.textContent = 'Provide email and at least one type';
+        setMsg(subMsg, 'Provide email and at least one type', false);
         return;
       }
       subSubmit.disabled = true;
@@ -245,32 +260,35 @@
           body: JSON.stringify({ email, types })
         });
         const j = await res.json();
+        console.log('subscribe response', res.status, j);
         if (res.ok) {
-          subMsg.textContent = 'Subscription created. Check your email and click the confirmation link.';
+          setMsg(subMsg, 'Subscription created. Check your email and click the confirmation link.', true);
           subForm.reset();
           subCert.checked = true;
         } else {
-          subMsg.textContent = (j && j.error) ? j.error : 'Subscription failed';
+          setMsg(subMsg, j && j.error ? j.error : 'Subscription failed', false);
         }
       } catch (err) {
-        console.error(err);
-        subMsg.textContent = 'Error subscribing';
+        console.error('Error subscribing', err);
+        setMsg(subMsg, 'Error subscribing (check console)', false);
       } finally {
         subSubmit.disabled = false;
       }
     });
 
-    // Resend confirmation form
+    // --- Resend confirmation handler ---
     const resendForm = document.getElementById('resend-form');
     const resendEmail = document.getElementById('resend-email');
     const resendMsg = document.getElementById('resend-msg');
     const resendSubmit = document.getElementById('resend-submit');
+
     resendForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      console.log('resend confirmation submit');
       resendMsg.textContent = '';
       const email = resendEmail.value.trim();
       if (!email) {
-        resendMsg.textContent = 'Enter an email';
+        setMsg(resendMsg, 'Enter an email', false);
         return;
       }
       resendSubmit.disabled = true;
@@ -281,31 +299,34 @@
           body: JSON.stringify({ email })
         });
         const j = await res.json();
+        console.log('resend response', res.status, j);
         if (res.ok) {
-          resendMsg.textContent = j.message || 'Confirmation resent. Check your email.';
+          setMsg(resendMsg, j && j.message ? j.message : 'Confirmation resent. Check your email.', true);
           resendForm.reset();
         } else {
-          resendMsg.textContent = (j && j.error) ? j.error : 'Failed to resend';
+          setMsg(resendMsg, (j && j.error) ? j.error : 'Failed to resend', false);
         }
       } catch (err) {
-        console.error(err);
-        resendMsg.textContent = 'Error';
+        console.error('Error resending confirmation', err);
+        setMsg(resendMsg, 'Error (see console)', false);
       } finally {
         resendSubmit.disabled = false;
       }
     });
 
-    // Request unsubscribe form
+    // --- Request unsubscribe handler ---
     const reqUnsubForm = document.getElementById('req-unsub-form');
     const reqUnsubEmail = document.getElementById('req-unsub-email');
     const reqUnsubMsg = document.getElementById('req-unsub-msg');
     const reqUnsubSubmit = document.getElementById('req-unsub-submit');
+
     reqUnsubForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      console.log('request unsubscribe submit');
       reqUnsubMsg.textContent = '';
       const email = reqUnsubEmail.value.trim();
       if (!email) {
-        reqUnsubMsg.textContent = 'Enter an email';
+        setMsg(reqUnsubMsg, 'Enter an email', false);
         return;
       }
       reqUnsubSubmit.disabled = true;
@@ -316,15 +337,16 @@
           body: JSON.stringify({ email })
         });
         const j = await res.json();
+        console.log('request-unsubscribe response', res.status, j);
         if (res.ok) {
-          reqUnsubMsg.textContent = j.message || 'Unsubscribe email sent. Check your inbox.';
+          setMsg(reqUnsubMsg, j && j.message ? j.message : 'Unsubscribe email sent. Check your inbox.', true);
           reqUnsubForm.reset();
         } else {
-          reqUnsubMsg.textContent = (j && j.error) ? j.error : 'Failed to request unsubscribe';
+          setMsg(reqUnsubMsg, (j && j.error) ? j.error : 'Failed to request unsubscribe', false);
         }
       } catch (err) {
-        console.error(err);
-        reqUnsubMsg.textContent = 'Error';
+        console.error('Error requesting unsubscribe', err);
+        setMsg(reqUnsubMsg, 'Error (see console)', false);
       } finally {
         reqUnsubSubmit.disabled = false;
       }
