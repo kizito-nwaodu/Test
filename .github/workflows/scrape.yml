@@ -1,0 +1,47 @@
+name: Scrape and publish credentials.json
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    # Run every 6 hours (adjust as you like)
+    - cron: '0 */6 * * *'
+
+jobs:
+  scrape-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run scraper
+        env:
+          LIST_URL: https://learn.microsoft.com/en-us/certifications/
+          SITEMAP_URL: https://learn.microsoft.com/sitemap.xml
+          OUTPUT_PATH: credentials.json   # writes to repo root; change if Pages uses docs/ or other folder
+        run: npm run scrape
+
+      - name: Commit credentials.json if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git status --porcelain | grep -q 'credentials.json'; then
+            git add credentials.json
+            git commit -m "chore(scrape): update credentials.json [ci skip]" || echo "no commit"
+            git push origin HEAD
+          else
+            echo "No changes to credentials.json"
+          fi
