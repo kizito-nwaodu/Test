@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Microsoft Credentials Dashboard</title>
+  <title>Microsoft Credentials Dashboard (static)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body { font-family: system-ui, -apple-system, Roboto, "Segoe UI", Arial; margin:0; background:#f6f8fa; color:#111; }
@@ -14,26 +14,23 @@
     .time{color:#666;font-size:.9rem}
     .meta{margin-bottom:1rem;color:#444}
     .error{color:#b00020}
-    .success{color:#0b8457}
     .controls{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem}
     .subscribe{margin-top:1rem;padding:1rem;border:1px solid #eee;border-radius:6px}
     input[type="email"]{padding:.5rem;width:280px}
     button{padding:.5rem 1rem;border-radius:6px;border:none;background:#0078d4;color:#fff;cursor:pointer}
-    .inline{display:inline-block;margin-left:8px}
-    #statusBox{position:fixed;right:1rem;top:6rem;background:#fff;padding:.5rem 1rem;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
     pre { background:#f3f4f6;padding:.5rem;border-radius:6px;overflow:auto;max-height:200px }
   </style>
 </head>
 <body>
   <header>
     <h1 style="margin:0">Microsoft Credentials Dashboard</h1>
-    <div style="opacity:.9;margin-top:6px">Live updates when new certifications, exams or skills appear</div>
+    <div style="opacity:.9;margin-top:6px">Live updates when new certifications, exams or skills appear (static)</div>
   </header>
 
   <div class="container">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <h2 style="margin:0">Credentials</h2>
-      <small id="status" class="time">Connecting...</small>
+      <small id="status" class="time">Loading…</small>
     </div>
 
     <div id="meta" class="meta">Loading status…</div>
@@ -44,73 +41,30 @@
         <label style="margin-left:8px"><input type="checkbox" id="filter-exam" checked> Exams</label>
         <label style="margin-left:8px"><input type="checkbox" id="filter-skill" checked> Skills</label>
       </div>
-      <div class="small">Filter the list by type. New items matching filters will appear live.</div>
+      <div class="small">Filter the list by type.</div>
     </div>
 
     <ul id="list"><li>Loading…</li></ul>
 
-    <div class="subscribe">
-      <h3 style="margin-top:0">Subscribe for email notifications</h3>
-      <div class="small">Enter your email and choose which types you'd like to get notifications for. You will receive a confirmation email and must confirm before receiving notifications.</div>
-
-      <form id="subscribe-form" style="margin-top:8px">
-        <div style="margin:8px 0"><input id="sub-email" type="email" placeholder="you@example.com" required></div>
-        <div>
-          <label><input type="checkbox" id="sub-cert" checked> Certifications</label>
-          <label style="margin-left:8px"><input type="checkbox" id="sub-exam"> Exams</label>
-          <label style="margin-left:8px"><input type="checkbox" id="sub-skill"> Skills</label>
-        </div>
-        <div style="margin-top:8px"><button id="sub-submit" type="submit">Subscribe</button> <span id="sub-msg"></span></div>
-      </form>
-
-      <hr style="margin:12px 0">
-
-      <h4 style="margin:0 0 8px 0">Have a pending confirmation?</h4>
-      <div class="small">If you didn't receive the confirmation email, enter your email below to resend it.</div>
-
-      <form id="resend-form" style="margin-top:8px">
-        <input id="resend-email" type="email" placeholder="you@example.com" required>
-        <button id="resend-submit" class="inline" type="submit">Resend confirmation</button>
-        <span id="resend-msg" style="margin-left:12px"></span>
-      </form>
-
-      <hr style="margin:12px 0">
-
-      <h4 style="margin:0 0 8px 0">Want to unsubscribe?</h4>
-      <div class="small">If you want to unsubscribe but don't have your unsubscribe link, request an unsubscribe email.</div>
-
-      <form id="req-unsub-form" style="margin-top:8px">
-        <input id="req-unsub-email" type="email" placeholder="you@example.com" required>
-        <button id="req-unsub-submit" class="inline" type="submit">Request unsubscribe email</button>
-        <span id="req-unsub-msg" style="margin-left:12px"></span>
-      </form>
-    </div>
-
     <div style="margin-top:16px">
-      <h4>Debug</h4>
-      <div class="small">If the dashboard is not loading, click the buttons below and paste the results into the chat so I can diagnose faster.</div>
+      <h4>Debug / Control</h4>
+      <div class="small">If the dashboard is empty, click the button to re-fetch credentials.json from the repository (credentials.json is updated by the GitHub Action).</div>
       <div style="margin-top:8px">
-        <button id="btn-check-credentials">Fetch /api/credentials now</button>
-        <button id="btn-debug-fetch">Fetch /api/debug-fetch</button>
+        <button id="btn-refresh">Refresh from credentials.json</button>
       </div>
       <div id="debug-output" style="margin-top:12px"></div>
     </div>
+
+    <div style="margin-top:18px">
+      <h4>Subscriptions/Emails</h4>
+      <p class="small">Note: this static deployment does not support email subscriptions (those require a backend). If you want subscription emails, I recommend deploying the Node backend to Replit/Render/Railway (I can give a simple guide) or using a 3rd-party service for form submissions.</p>
+    </div>
   </div>
 
-  <div id="statusBox">Socket status: <span id="socketStatus">—</span></div>
-
-  <script src="/socket.io/socket.io.js"></script>
   <script>
-    // ====== CONFIGURE THIS to your backend URL ======
-    // Replace the placeholder with the public URL where your backend (server.js) is running,
-    // e.g. "https://my-backend-abc123.repl.co" or "https://your-app.onrender.com"
-    const API_BASE = "https://YOUR-BACKEND-URL";
-    // =================================================
-
-    const statusEl = document.getElementById('status');
-    const socketStatus = document.getElementById('socketStatus');
-    const metaEl = document.getElementById('meta');
     const listEl = document.getElementById('list');
+    const metaEl = document.getElementById('meta');
+    const status = document.getElementById('status');
     const debugOut = document.getElementById('debug-output');
 
     const filterCert = document.getElementById('filter-cert');
@@ -119,9 +73,7 @@
 
     let allItems = [];
 
-    function setMeta(text) { metaEl.textContent = text; }
-    function setSocketStatus(text, isError=false) { socketStatus.textContent = text; socketStatus.style.color = isError ? 'red' : 'green'; }
-    function setList(items) {
+    function render(items) {
       listEl.innerHTML = '';
       if (!items || items.length === 0) { listEl.innerHTML = '<li>No credentials found.</li>'; return; }
       for (const it of items) {
@@ -129,7 +81,7 @@
         const a = document.createElement('a'); a.href = it.url; a.target = '_blank'; a.rel='noopener noreferrer'; a.textContent = it.title;
         const right = document.createElement('div'); right.style.display='flex'; right.style.flexDirection='column'; right.style.alignItems='flex-end';
         const type = document.createElement('div'); type.className='small'; type.textContent = it.type;
-        const time = document.createElement('div'); time.className='time'; time.textContent = new Date(it.first_seen_at).toLocaleString();
+        const time = document.createElement('div'); time.className='time'; time.textContent = it.id ? '' : '';
         right.appendChild(type); right.appendChild(time);
         li.appendChild(a); li.appendChild(right);
         listEl.appendChild(li);
@@ -144,114 +96,45 @@
         if (it.type === 'skill') return showSkill;
         return true;
       });
-      setList(filtered);
+      render(filtered);
     }
 
-    // Use API_BASE for calls
-    async function loadInitial() {
+    async function loadCredentials() {
+      status.textContent = 'Loading…';
+      debugOut.innerHTML = '';
       try {
-        const res = await fetch(API_BASE + '/api/credentials');
+        const res = await fetch('./credentials.json', { cache: 'no-store' });
         if (!res.ok) {
           const txt = await res.text();
-          setList([]);
-          setMeta('Error loading data (status ' + res.status + '): ' + txt);
+          metaEl.textContent = 'Error loading credentials.json: ' + res.status + ' ' + txt;
+          status.textContent = 'Error';
+          listEl.innerHTML = '<li>Error loading data</li>';
           return;
         }
-        const json = await res.json();
-        allItems = json.data || [];
+        const j = await res.json();
+        allItems = j.items || [];
         applyFilters();
+        metaEl.textContent = `Generated: ${j.generated_at || 'n/a'} | Source: ${j.source || 'n/a'} | Items: ${allItems.length}`;
+        status.textContent = 'Loaded';
       } catch (err) {
-        console.error('Error calling /api/credentials', err);
-        setList([]);
-        setMeta('Error loading data: ' + (err.message || err));
+        metaEl.textContent = 'Fetch error: ' + (err.message || err);
+        status.textContent = 'Error';
+        listEl.innerHTML = '<li>Error loading data</li>';
       }
-      try {
-        const s = await fetch(API_BASE + '/api/status').then(r => r.json());
-        let m = `Last scrape: ${s.last_scrape || 'n/a'} | Started: ${s.last_scrape_started || 'n/a'} | New items last run: ${s.last_new_count || 0} | Total items: ${s.total || 0}`;
-        if (s.last_error) m += ' | Error: ' + s.last_error;
-        setMeta(m);
-      } catch (err) { console.warn('Could not load /api/status', err); }
     }
+
+    document.getElementById('btn-refresh').addEventListener('click', async () => {
+      debugOut.innerHTML = '<div class="small">Fetching ./credentials.json ...</div>';
+      await loadCredentials();
+      debugOut.innerHTML = '<div class="small">Done. See status above.</div>';
+    });
 
     filterCert.addEventListener('change', applyFilters);
     filterExam.addEventListener('change', applyFilters);
     filterSkill.addEventListener('change', applyFilters);
 
-    loadInitial();
-
-    // Explicit Socket.IO connect to backend host
-    // Note: socket.io client script is still loaded from the same host that serves this HTML,
-    // but connecting to API_BASE is required if backend is elsewhere.
-    const socket = io(API_BASE, { transports: ['websocket', 'polling'] });
-
-    socket.on('connect', () => { statusEl.textContent = 'Connected'; setSocketStatus('connected'); });
-    socket.on('disconnect', (reason) => { statusEl.textContent = 'Disconnected (' + reason + ')'; setSocketStatus('disconnected', true); });
-    socket.on('connect_error', (err) => { console.error('Socket connect_error', err); setSocketStatus('connect_error', true); statusEl.textContent = 'Socket connect error'; });
-    socket.on('new-credential', (data) => {
-      allItems.unshift(data);
-      applyFilters();
-      loadInitial();
-    });
-
-    // Forms use API_BASE
-    document.getElementById('subscribe-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('sub-email').value.trim();
-      const types = [];
-      if (document.getElementById('sub-cert').checked) types.push('certification');
-      if (document.getElementById('sub-exam').checked) types.push('exam');
-      if (document.getElementById('sub-skill').checked) types.push('skill');
-      const msgEl = document.getElementById('sub-msg'); msgEl.textContent = '';
-      try {
-        const res = await fetch(API_BASE + '/api/subscribe', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, types }) });
-        const j = await res.json();
-        if (res.ok) { msgEl.textContent = j.message || 'Subscribed — check your email'; msgEl.className = 'success'; }
-        else { msgEl.textContent = j.error || 'Subscription failed'; msgEl.className = 'error'; }
-      } catch (err) { console.error(err); msgEl.textContent = 'Error subscribing'; msgEl.className='error'; }
-    });
-
-    document.getElementById('resend-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('resend-email').value.trim();
-      const out = document.getElementById('resend-msg'); out.textContent='';
-      try {
-        const res = await fetch(API_BASE + '/api/resend-confirmation', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email }) });
-        const j = await res.json();
-        if (res.ok) { out.textContent = j.message || 'Confirmation resent'; out.className='success'; }
-        else { out.textContent = j.error || 'Resend failed'; out.className='error'; }
-      } catch (err) { console.error(err); out.textContent='Error'; out.className='error'; }
-    });
-
-    document.getElementById('req-unsub-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('req-unsub-email').value.trim();
-      const out = document.getElementById('req-unsub-msg'); out.textContent='';
-      try {
-        const res = await fetch(API_BASE + '/api/request-unsubscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email }) });
-        const j = await res.json();
-        if (res.ok) { out.textContent = j.message || 'Unsubscribe email sent'; out.className='success'; }
-        else { out.textContent = j.error || 'Request failed'; out.className='error'; }
-      } catch (err) { console.error(err); out.textContent='Error'; out.className='error'; }
-    });
-
-    // Debug buttons
-    document.getElementById('btn-check-credentials').addEventListener('click', async () => {
-      debugOut.innerHTML = '<div class="small">Fetching ' + API_BASE + '/api/credentials ...</div>';
-      try {
-        const res = await fetch(API_BASE + '/api/credentials');
-        const text = await res.text();
-        debugOut.innerHTML = `<pre>${res.status} ${res.statusText}\n\n${escapeHtml(text)}</pre>`;
-      } catch (err) { debugOut.innerHTML = `<div class="error">Network error: ${err.message || err}</div>`; console.error(err); }
-    });
-    document.getElementById('btn-debug-fetch').addEventListener('click', async () => {
-      debugOut.innerHTML = '<div class="small">Fetching ' + API_BASE + '/api/debug-fetch ...</div>';
-      try {
-        const res = await fetch(API_BASE + '/api/debug-fetch'); const j = await res.json();
-        debugOut.innerHTML = `<pre>${escapeHtml(JSON.stringify(j, null, 2))}</pre>`;
-      } catch (err) { debugOut.innerHTML = `<div class="error">Network error: ${err.message || err}</div>`; console.error(err); }
-    });
-
-    function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    // initial load
+    loadCredentials();
   </script>
 </body>
 </html>
