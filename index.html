@@ -21,6 +21,7 @@
     .inline { display:inline-block; margin-left:8px; }
     .error { color: #b00020; margin-left: 8px; }
     .success { color: #0b8457; margin-left: 8px; }
+    .meta { margin-bottom: 1rem; color: #444; }
   </style>
 </head>
 <body>
@@ -35,6 +36,8 @@
       <small id="status" class="time">Connecting...</small>
     </div>
 
+    <div class="meta" id="meta">Loading status…</div>
+
     <div class="controls">
       <div>
         <label><input type="checkbox" id="filter-cert" checked> Certifications</label>
@@ -44,19 +47,14 @@
       <div class="small">Filter the list by type. New items matching filters will appear live.</div>
     </div>
 
-    <ul id="list">
-      <li>Loading…</li>
-    </ul>
+    <ul id="list"><li>Loading…</li></ul>
 
     <div class="subscribe">
       <h3 style="margin-top:0">Subscribe for email notifications</h3>
       <div class="small">Enter your email and choose which types you'd like to get notifications for. You'll receive a confirmation email — you must confirm before receiving notifications.</div>
 
-      <!-- Subscribe form -->
       <form id="subscribe-form" style="margin-top:8px">
-        <div style="margin:8px 0">
-          <input id="sub-email" type="email" placeholder="you@example.com" required />
-        </div>
+        <div style="margin:8px 0"><input id="sub-email" type="email" placeholder="you@example.com" required /></div>
         <div>
           <label><input type="checkbox" id="sub-cert" checked> Certifications</label>
           <label style="margin-left:8px"><input type="checkbox" id="sub-exam"> Exams</label>
@@ -73,7 +71,6 @@
       <h4 style="margin:0 0 8px 0">Have a pending confirmation?</h4>
       <div class="small">If you didn't receive the confirmation email, enter your email below to resend it.</div>
 
-      <!-- Resend confirmation form -->
       <form id="resend-form" style="margin-top:8px">
         <input id="resend-email" type="email" placeholder="you@example.com" required />
         <button id="resend-submit" class="inline" type="submit">Resend confirmation</button>
@@ -85,22 +82,20 @@
       <h4 style="margin:0 0 8px 0">Want to unsubscribe?</h4>
       <div class="small">If you want to unsubscribe but don't have your unsubscribe link, request an unsubscribe email.</div>
 
-      <!-- Request unsubscribe form -->
       <form id="req-unsub-form" style="margin-top:8px">
         <input id="req-unsub-email" type="email" placeholder="you@example.com" required />
         <button id="req-unsub-submit" class="inline" type="submit">Request unsubscribe email</button>
         <span id="req-unsub-msg" style="margin-left:12px"></span>
       </form>
     </div>
-
   </div>
 
   <div id="toast" class="toast"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // Basic UI helpers and state
     const statusEl = document.getElementById('status');
+    const metaEl = document.getElementById('meta');
     const listEl = document.getElementById('list');
     const toast = document.getElementById('toast');
 
@@ -108,17 +103,30 @@
     const filterExam = document.getElementById('filter-exam');
     const filterSkill = document.getElementById('filter-skill');
 
-    let allItems = []; // cached list
+    let allItems = [];
 
     function showToast(text) {
       toast.textContent = text;
       toast.style.display = 'block';
       setTimeout(() => { toast.style.display = 'none'; }, 5000);
     }
-
     function setMsg(el, text, ok = true) {
       el.textContent = text;
       el.className = ok ? 'success' : 'error';
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const j = await res.json();
+        metaEl.textContent = `Last scrape: ${j.last_scrape || 'n/a'} | Started: ${j.last_scrape_started || 'n/a'} | New items last run: ${j.last_new_count || 0} | Total items: ${j.total || 0}`;
+        if (j.last_error) {
+          metaEl.textContent += ` | Error: ${j.last_error}`;
+        }
+      } catch (err) {
+        console.error('status error', err);
+        metaEl.textContent = 'Error fetching status';
+      }
     }
 
     function renderList(items) {
@@ -171,9 +179,10 @@
         const json = await res.json();
         allItems = json.data || [];
         applyFilters();
+        await loadStatus();
       } catch (err) {
+        console.error('loadInitial err', err);
         listEl.innerHTML = '<li>Error loading data</li>';
-        console.error('Error loading initial credentials', err);
       }
     }
 
@@ -184,172 +193,78 @@
     loadInitial();
 
     const socket = io();
-
-    socket.on('connect', () => {
-      statusEl.textContent = 'Connected';
-    });
-    socket.on('disconnect', () => {
-      statusEl.textContent = 'Disconnected';
-    });
-
+    socket.on('connect', () => { statusEl.textContent = 'Connected'; });
+    socket.on('disconnect', () => { statusEl.textContent = 'Disconnected'; });
     socket.on('new-credential', (data) => {
-      // Add to cache
       allItems.unshift(data);
-      // If it passes current filters, insert at top
-      const showCert = filterCert.checked;
-      const showExam = filterExam.checked;
-      const showSkill = filterSkill.checked;
-      let show = false;
-      if (data.type === 'certification' && showCert) show = true;
-      if (data.type === 'exam' && showExam) show = true;
-      if (data.type === 'skill' && showSkill) show = true;
-      if (show) {
-        const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.href = data.url;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.textContent = data.title;
-        const right = document.createElement('div');
-        right.style.display = 'flex';
-        right.style.flexDirection = 'column';
-        right.style.alignItems = 'flex-end';
-        const type = document.createElement('div');
-        type.className = 'small';
-        type.textContent = data.type;
-        const time = document.createElement('div');
-        time.className = 'time';
-        time.textContent = new Date(data.first_seen_at).toLocaleString();
-        right.appendChild(type);
-        right.appendChild(time);
-        li.appendChild(a);
-        li.appendChild(right);
-        if (listEl.firstChild) listEl.insertBefore(li, listEl.firstChild);
-        else listEl.appendChild(li);
-      }
+      applyFilters();
       showToast('New ' + data.type + ': ' + data.title);
+      loadStatus();
     });
 
-    // --- Subscription form handler ---
+    // subscribe handler
     const subForm = document.getElementById('subscribe-form');
     const subEmail = document.getElementById('sub-email');
     const subCert = document.getElementById('sub-cert');
     const subExam = document.getElementById('sub-exam');
     const subSkill = document.getElementById('sub-skill');
     const subMsg = document.getElementById('sub-msg');
-    const subSubmit = document.getElementById('sub-submit');
 
     subForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      console.log('subscribe form submit');
       subMsg.textContent = '';
       const email = subEmail.value.trim();
       const types = [];
       if (subCert.checked) types.push('certification');
       if (subExam.checked) types.push('exam');
       if (subSkill.checked) types.push('skill');
-      if (!email || types.length === 0) {
-        setMsg(subMsg, 'Provide email and at least one type', false);
-        return;
-      }
-      subSubmit.disabled = true;
+      if (!email || types.length === 0) { setMsg(subMsg, 'Provide email and at least one type', false); return; }
       try {
         const res = await fetch('/api/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, types })
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, types })
         });
         const j = await res.json();
-        console.log('subscribe response', res.status, j);
-        if (res.ok) {
-          setMsg(subMsg, 'Subscription created. Check your email and click the confirmation link.', true);
-          subForm.reset();
-          subCert.checked = true;
-        } else {
-          setMsg(subMsg, j && j.error ? j.error : 'Subscription failed', false);
-        }
-      } catch (err) {
-        console.error('Error subscribing', err);
-        setMsg(subMsg, 'Error subscribing (check console)', false);
-      } finally {
-        subSubmit.disabled = false;
-      }
+        if (res.ok) setMsg(subMsg, j.message || 'Subscribed — check your email', true);
+        else setMsg(subMsg, j.error || 'Subscription failed', false);
+      } catch (err) { console.error(err); setMsg(subMsg, 'Error subscribing', false); }
     });
 
-    // --- Resend confirmation handler ---
+    // resend confirmation
     const resendForm = document.getElementById('resend-form');
     const resendEmail = document.getElementById('resend-email');
     const resendMsg = document.getElementById('resend-msg');
-    const resendSubmit = document.getElementById('resend-submit');
-
     resendForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      console.log('resend confirmation submit');
       resendMsg.textContent = '';
       const email = resendEmail.value.trim();
-      if (!email) {
-        setMsg(resendMsg, 'Enter an email', false);
-        return;
-      }
-      resendSubmit.disabled = true;
+      if (!email) { setMsg(resendMsg, 'Enter an email', false); return; }
       try {
         const res = await fetch('/api/resend-confirmation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
         });
         const j = await res.json();
-        console.log('resend response', res.status, j);
-        if (res.ok) {
-          setMsg(resendMsg, j && j.message ? j.message : 'Confirmation resent. Check your email.', true);
-          resendForm.reset();
-        } else {
-          setMsg(resendMsg, (j && j.error) ? j.error : 'Failed to resend', false);
-        }
-      } catch (err) {
-        console.error('Error resending confirmation', err);
-        setMsg(resendMsg, 'Error (see console)', false);
-      } finally {
-        resendSubmit.disabled = false;
-      }
+        if (res.ok) setMsg(resendMsg, j.message || 'Confirmation resent', true);
+        else setMsg(resendMsg, j.error || 'Resend failed', false);
+      } catch (err) { console.error(err); setMsg(resendMsg, 'Error', false); }
     });
 
-    // --- Request unsubscribe handler ---
+    // request unsubscribe
     const reqUnsubForm = document.getElementById('req-unsub-form');
     const reqUnsubEmail = document.getElementById('req-unsub-email');
     const reqUnsubMsg = document.getElementById('req-unsub-msg');
-    const reqUnsubSubmit = document.getElementById('req-unsub-submit');
-
     reqUnsubForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      console.log('request unsubscribe submit');
       reqUnsubMsg.textContent = '';
       const email = reqUnsubEmail.value.trim();
-      if (!email) {
-        setMsg(reqUnsubMsg, 'Enter an email', false);
-        return;
-      }
-      reqUnsubSubmit.disabled = true;
+      if (!email) { setMsg(reqUnsubMsg, 'Enter an email', false); return; }
       try {
         const res = await fetch('/api/request-unsubscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
         });
         const j = await res.json();
-        console.log('request-unsubscribe response', res.status, j);
-        if (res.ok) {
-          setMsg(reqUnsubMsg, j && j.message ? j.message : 'Unsubscribe email sent. Check your inbox.', true);
-          reqUnsubForm.reset();
-        } else {
-          setMsg(reqUnsubMsg, (j && j.error) ? j.error : 'Failed to request unsubscribe', false);
-        }
-      } catch (err) {
-        console.error('Error requesting unsubscribe', err);
-        setMsg(reqUnsubMsg, 'Error (see console)', false);
-      } finally {
-        reqUnsubSubmit.disabled = false;
-      }
+        if (res.ok) setMsg(reqUnsubMsg, j.message || 'Unsubscribe email sent', true);
+        else setMsg(reqUnsubMsg, j.error || 'Request failed', false);
+      } catch (err) { console.error(err); setMsg(reqUnsubMsg, 'Error', false); }
     });
   </script>
 </body>
